@@ -11,56 +11,72 @@ class DashboardRepository {
   final SupabaseClient _client;
 
   /// Loads everything the dashboard needs and computes aggregates.
-  Future<DashboardStats> fetchStats() async {
+  ///
+  /// [ownerRestaurantIds] controls scoping:
+  ///   - null  -> super admin: global metrics across all restaurants.
+  ///   - list  -> restaurant owner: metrics limited to the owned restaurant
+  ///              ids. An empty list yields zeroes (owner with no restaurant).
+  ///
+  /// RLS already constrains what each user can read; these filters are the
+  /// app-side half of defense in depth and keep the numbers consistent.
+  Future<DashboardStats> fetchStats({List<int>? ownerRestaurantIds}) async {
+    final isOwner = ownerRestaurantIds != null;
+
+    // Owner with zero restaurants: nothing to show.
+    if (isOwner && ownerRestaurantIds.isEmpty) {
+      return const DashboardStats();
+    }
+
     final now = DateTime.now();
     final startOfToday = DateTime(now.year, now.month, now.day);
-    // Monday-based week start.
-    final startOfWeek =
-        startOfToday.subtract(Duration(days: now.weekday - 1));
+    final startOfWeek = startOfToday.subtract(Duration(days: now.weekday - 1));
     final startOfMonth = DateTime(now.year, now.month, 1);
-    // 7-day chart window: today and the previous 6 days.
     final windowStart = startOfToday.subtract(const Duration(days: 6));
 
-    // --- Simple counts (head request, no rows transferred) ---
-    final totalRestaurants = await _count('restaurants');
+    // --- Counts (head requests, no rows transferred) ---
+    final totalRestaurants = await _countRestaurants(ownerRestaurantIds);
     final activeRestaurants =
-        await _count('restaurants', activeColumn: 'is_active', active: true);
-    final totalMenuItems = await _count('menu_items');
-    final availableMenuItems = await _count('menu_items',
-        activeColumn: 'is_available', active: true);
+        await _countRestaurants(ownerRestaurantIds, activeOnly: true);
+    final totalMenuItems = await _countByRestaurant('menu_items', ownerRestaurantIds);
+    final availableMenuItems = await _countByRestaurant(
+        'menu_items', ownerRestaurantIds,
+        boolColumn: 'is_available');
+    final totalOrders = await _countByRestaurant('orders', ownerRestaurantIds);
+
+    // Banners are platform-wide (not restaurant-scoped). Owners do not get
+    // banner metrics in the UI, but we still populate them harmlessly.
     final totalBanners = await _count('banners');
     final activeBanners =
-        await _count('banners', activeColumn: 'is_active', active: true);
-    final totalOrders = await _count('orders');
+        await _count('banners', boolColumn: 'is_active', boolValue: true);
 
-    // --- Orders: fetch fields needed for revenue + status + charts ---
-    // Pull this month's orders (covers today, week, month, and the 7-day
-    // window which is always within the current or previous month edge).
-    // To be safe for the 7-day window crossing a month boundary, fetch from
-    // the earlier of windowStart and startOfMonth.
+    // --- Orders for revenue + charts (current window) ---
     final ordersFrom =
         windowStart.isBefore(startOfMonth) ? windowStart : startOfMonth;
 
-    final orderRows = await _client
+    var windowQuery = _client
         .from('orders')
-        .select('total_amount, status, created_at')
+        .select('total_amount, status, created_at, restaurant_id')
         .gte('created_at', ordersFrom.toIso8601String());
-
+    if (isOwner) {
+      windowQuery = windowQuery.inFilter('restaurant_id', ownerRestaurantIds);
+    }
+    final orderRows = await windowQuery;
     final orders = orderRows.map((e) => Order.fromMap(e)).toList();
 
-    // --- Status breakdown over ALL orders (consistent with Total Orders) ---
-    // Fetch just the status column for every order; lightweight at V1 scale.
-    final statusRows = await _client.from('orders').select('status');
+    // --- Status breakdown over all (scoped) orders ---
+    var statusQuery = _client.from('orders').select('status');
+    if (isOwner) {
+      statusQuery = statusQuery.inFilter('restaurant_id', ownerRestaurantIds);
+    }
+    final statusRows = await statusQuery;
     final statusCounts = <OrderStatus, int>{};
     for (final row in statusRows) {
       final s = OrderStatus.fromRaw(row['status'] as String?);
       statusCounts.update(s, (v) => v + 1, ifAbsent: () => 1);
     }
 
-    // --- Revenue rollups (exclude cancelled from revenue) ---
+    // --- Revenue rollups (exclude cancelled) + chart buckets ---
     double revToday = 0, revWeek = 0, revMonth = 0;
-
-    // Daily buckets for the 7-day charts.
     final dailyRevenue = <DateTime, double>{};
     final dailyOrders = <DateTime, int>{};
     for (var i = 0; i < 7; i++) {
@@ -83,7 +99,6 @@ class DashboardRepository {
         if (!created.isBefore(startOfMonth)) revMonth += amount;
       }
 
-      // Chart buckets (count all orders incl. cancelled; revenue excl.).
       if (dailyOrders.containsKey(day)) {
         dailyOrders[day] = (dailyOrders[day] ?? 0) + 1;
         if (!isCancelled) {
@@ -118,26 +133,52 @@ class DashboardRepository {
     );
   }
 
-  /// Returns an exact row count, optionally filtered by a boolean column.
-  /// Uses a head request so no row data is transferred.
+  // --- count helpers --------------------------------------------------
+
+  /// Counts restaurants, scoped to [ownerIds] when non-null.
+  Future<int> _countRestaurants(List<int>? ownerIds,
+      {bool activeOnly = false}) async {
+    var q = _client.from('restaurants').select();
+    if (ownerIds != null) {
+      q = q.inFilter('id', ownerIds);
+    }
+    if (activeOnly) {
+      q = q.eq('is_active', true);
+    }
+    final r = await q.count(CountOption.exact);
+    return r.count;
+  }
+
+  /// Counts rows in a table that has a restaurant_id column, scoped to
+  /// [ownerIds] when non-null, optionally requiring a boolean column = true.
+  Future<int> _countByRestaurant(
+    String table,
+    List<int>? ownerIds, {
+    String? boolColumn,
+  }) async {
+    var q = _client.from(table).select();
+    if (ownerIds != null) {
+      q = q.inFilter('restaurant_id', ownerIds);
+    }
+    if (boolColumn != null) {
+      q = q.eq(boolColumn, true);
+    }
+    final r = await q.count(CountOption.exact);
+    return r.count;
+  }
+
+  /// Unscoped count (used for platform-wide tables like banners).
   Future<int> _count(
     String table, {
-    String? activeColumn,
-    bool? active,
+    String? boolColumn,
+    bool? boolValue,
   }) async {
-    if (activeColumn != null && active != null) {
-      return _client
-          .from(table)
-          .select()
-          .eq(activeColumn, active)
-          .count(CountOption.exact)
-          .then((r) => r.count);
+    var q = _client.from(table).select();
+    if (boolColumn != null && boolValue != null) {
+      q = q.eq(boolColumn, boolValue);
     }
-    return _client
-        .from(table)
-        .select()
-        .count(CountOption.exact)
-        .then((r) => r.count);
+    final r = await q.count(CountOption.exact);
+    return r.count;
   }
 }
 
