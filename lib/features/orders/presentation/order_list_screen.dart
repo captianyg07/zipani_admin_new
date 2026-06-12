@@ -11,6 +11,9 @@ import '../../../core/widgets/modern_data_table.dart';
 import '../../../core/widgets/segmented_tabs.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../core/widgets/status_pill.dart';
+import '../../auth/presentation/current_profile_provider.dart';
+import '../../delivery_partners/data/delivery_partner_model.dart';
+import '../../delivery_partners/data/delivery_partner_profiles_provider.dart';
 import '../data/order_model.dart';
 import '../data/order_status.dart';
 import 'order_controller.dart';
@@ -67,10 +70,57 @@ class _OrderListScreenState extends ConsumerState<OrderListScreen> {
   String _time(DateTime? dt) =>
       dt == null ? '—' : DateFormat('d MMM, h:mm a').format(dt);
 
+  void _snack(String m, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+          content: Text(m),
+          backgroundColor: error ? DS.danger : DS.success));
+  }
+
+  /// Super-admin-only: pick a rider (or unassign) for [order].
+  Future<void> _openAssign(
+      Order order, List<DeliveryPartner> partners) async {
+    if (order.id == null) return;
+    final result = await showDialog<_AssignResult>(
+      context: context,
+      builder: (_) => _AssignRiderDialog(
+        order: order,
+        partners: partners,
+      ),
+    );
+    if (result == null) return; // cancelled
+
+    final n = ref.read(orderListControllerProvider.notifier);
+    final String? err;
+    if (result.unassign) {
+      err = await n.unassignPartner(order.id!);
+    } else if (result.partnerId != null) {
+      err = await n.assignPartner(order.id!, result.partnerId!);
+    } else {
+      return;
+    }
+    _snack(err ?? (result.unassign ? 'Rider unassigned' : 'Rider assigned'),
+        error: err != null);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(orderListControllerProvider);
     final notifier = ref.read(orderListControllerProvider.notifier);
+
+    final isSuperAdmin =
+        ref.watch(currentUserOrNullProvider)?.isSuperAdmin ?? false;
+
+    // id -> partner name for the Assigned rider column.
+    final partnersAsync = ref.watch(activeDeliveryPartnersProvider);
+    final partners =
+        partnersAsync.asData?.value ?? const <DeliveryPartner>[];
+    final partnerNameById = <int, String>{
+      for (final p in partners)
+        if (p.id != null) p.id!: p.name,
+    };
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(DS.s24),
@@ -127,7 +177,9 @@ class _OrderListScreenState extends ConsumerState<OrderListScreen> {
                     TableColumn('Customer', flex: 2),
                     TableColumn('Amount', flex: 1),
                     TableColumn('Status', flex: 2),
+                    TableColumn('Assigned rider', flex: 2),
                     TableColumn('Time', flex: 2),
+                    TableColumn('', fixed: 56),
                   ],
                   footer: _Pager(state: state, notifier: notifier),
                   rows: [
@@ -142,7 +194,31 @@ class _OrderListScreenState extends ConsumerState<OrderListScreen> {
                           child: StatusPill(
                               label: o.status.label, color: o.status.color),
                         ),
+                        _RiderCell(
+                          partnerId: o.deliveryPartnerId,
+                          name: o.deliveryPartnerId == null
+                              ? null
+                              : partnerNameById[o.deliveryPartnerId],
+                        ),
                         Text(_time(o.createdAt), style: AppType.small),
+                        // Assign action — super admin only. Empty cell otherwise
+                        // so owners still see the row (and the rider column).
+                        if (isSuperAdmin)
+                          IconButton(
+                            tooltip: o.deliveryPartnerId == null
+                                ? 'Assign rider'
+                                : 'Reassign rider',
+                            icon: Icon(
+                              o.deliveryPartnerId == null
+                                  ? Icons.person_add_alt
+                                  : Icons.swap_horiz,
+                              color: DS.brand,
+                              size: 20,
+                            ),
+                            onPressed: () => _openAssign(o, partners),
+                          )
+                        else
+                          const SizedBox.shrink(),
                       ]),
                   ],
                 ),
@@ -150,6 +226,135 @@ class _OrderListScreenState extends ConsumerState<OrderListScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _RiderCell extends StatelessWidget {
+  const _RiderCell({required this.partnerId, required this.name});
+  final int? partnerId;
+  final String? name;
+
+  @override
+  Widget build(BuildContext context) {
+    if (partnerId == null) {
+      return Text('Unassigned',
+          style: AppType.small.copyWith(color: DS.muted));
+    }
+    if (name != null && name!.isNotEmpty) {
+      return Row(
+        children: [
+          const Icon(Icons.delivery_dining_outlined,
+              size: 16, color: DS.info),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(name!,
+                style: AppType.body, overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      );
+    }
+    // Assigned, but the partner isn't in the active list (inactive/loading).
+    return Row(
+      children: [
+        const Icon(Icons.delivery_dining_outlined, size: 16, color: DS.muted),
+        const SizedBox(width: 6),
+        Text('Assigned', style: AppType.small),
+      ],
+    );
+  }
+}
+
+class _AssignResult {
+  const _AssignResult({this.partnerId, this.unassign = false});
+  final int? partnerId;
+  final bool unassign;
+}
+
+class _AssignRiderDialog extends StatefulWidget {
+  const _AssignRiderDialog({required this.order, required this.partners});
+  final Order order;
+  final List<DeliveryPartner> partners;
+
+  @override
+  State<_AssignRiderDialog> createState() => _AssignRiderDialogState();
+}
+
+class _AssignRiderDialogState extends State<_AssignRiderDialog> {
+  int? _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    // Preselect the current assignment if it's among the active partners.
+    final current = widget.order.deliveryPartnerId;
+    final ids = widget.partners.map((p) => p.id).whereType<int>().toSet();
+    _selected = (current != null && ids.contains(current)) ? current : null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isAssigned = widget.order.deliveryPartnerId != null;
+    return AlertDialog(
+      backgroundColor: DS.surface,
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(DS.rLg)),
+      title: Text(isAssigned ? 'Reassign rider' : 'Assign rider',
+          style: AppType.h2),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Order #${widget.order.id ?? '—'}', style: AppType.small),
+            const SizedBox(height: DS.s16),
+            if (widget.partners.isEmpty)
+              Text('No active delivery partners available.',
+                  style: AppType.body)
+            else
+              DropdownButtonFormField<int>(
+                value: _selected,
+                isExpanded: true,
+                hint: const Text('Select a rider'),
+                items: [
+                  for (final p in widget.partners)
+                    if (p.id != null)
+                      DropdownMenuItem<int>(
+                        value: p.id,
+                        child: Text(
+                          p.phone == null || p.phone!.isEmpty
+                              ? p.name
+                              : '${p.name} · ${p.phone}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                ],
+                onChanged: (v) => setState(() => _selected = v),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        if (isAssigned)
+          TextButton(
+            onPressed: () => Navigator.of(context)
+                .pop(const _AssignResult(unassign: true)),
+            child: const Text('Unassign',
+                style: TextStyle(color: DS.danger)),
+          ),
+        FilledButton(
+          onPressed: _selected == null
+              ? null
+              : () => Navigator.of(context)
+                  .pop(_AssignResult(partnerId: _selected)),
+          child: Text(isAssigned ? 'Reassign' : 'Assign'),
+        ),
+      ],
     );
   }
 }

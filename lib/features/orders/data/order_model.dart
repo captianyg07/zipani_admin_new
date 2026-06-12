@@ -13,6 +13,8 @@ class Order {
     required this.status,
     this.rawStatus,
     this.createdAt,
+    this.deliveryPartnerId,
+    this.assignedAt,
   });
 
   final int? id;
@@ -26,6 +28,10 @@ class Order {
   final String? rawStatus;
   final DateTime? createdAt;
 
+  /// Assignment (Phase 9.4). Null = unassigned.
+  final int? deliveryPartnerId;
+  final DateTime? assignedAt;
+
   factory Order.fromMap(Map<String, dynamic> map) {
     return Order(
       id: _toInt(map['id']),
@@ -38,6 +44,10 @@ class Order {
       createdAt: map['created_at'] == null
           ? null
           : DateTime.tryParse(map['created_at'].toString()),
+      deliveryPartnerId: _toInt(map['delivery_partner_id']),
+      assignedAt: map['assigned_at'] == null
+          ? null
+          : DateTime.tryParse(map['assigned_at'].toString()),
     );
   }
 

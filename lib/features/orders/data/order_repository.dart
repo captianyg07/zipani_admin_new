@@ -82,6 +82,23 @@ class OrderRepository {
         .update({'status': status.dbValue}).eq('id', orderId);
   }
 
+  /// Assigns (or reassigns) an order to a delivery partner and stamps the
+  /// assignment time. Phase 9.4.
+  Future<void> assignPartner(int orderId, int deliveryPartnerId) async {
+    await _client.from(_ordersTable).update({
+      'delivery_partner_id': deliveryPartnerId,
+      'assigned_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', orderId);
+  }
+
+  /// Clears an order's delivery partner assignment.
+  Future<void> unassignPartner(int orderId) async {
+    await _client.from(_ordersTable).update({
+      'delivery_partner_id': null,
+      'assigned_at': null,
+    }).eq('id', orderId);
+  }
+
   /// PostgREST `or` values are comma/paren-sensitive; keep aliases simple.
   /// Spaces are fine inside ilike patterns, so minimal escaping is needed.
   String _escape(String value) => value.replaceAll(',', '');

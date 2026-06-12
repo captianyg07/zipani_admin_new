@@ -120,6 +120,28 @@ class OrderListController extends StateNotifier<OrderListState> {
     }
   }
 
+  /// Assign or reassign a rider to an order. Phase 9.4.
+  Future<String?> assignPartner(int orderId, int deliveryPartnerId) async {
+    try {
+      await _repo.assignPartner(orderId, deliveryPartnerId);
+      await load();
+      return null;
+    } catch (e) {
+      return _readable(e);
+    }
+  }
+
+  /// Remove a rider assignment from an order.
+  Future<String?> unassignPartner(int orderId) async {
+    try {
+      await _repo.unassignPartner(orderId);
+      await load();
+      return null;
+    } catch (e) {
+      return _readable(e);
+    }
+  }
+
   String _readable(Object e) =>
       'Something went wrong. Please try again.\n${e.toString()}';
 }

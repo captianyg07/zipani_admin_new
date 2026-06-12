@@ -39,6 +39,20 @@ class ProfileRepository {
     }
     return ids;
   }
+
+  /// All profiles with the given role (e.g. 'delivery_partner'), ordered by
+  /// email. Used to populate the "Linked Account" picker. Read-only.
+  Future<List<Profile>> fetchByRole(String role) async {
+    final rows = await _client
+        .from('profiles')
+        .select('id, email, role')
+        .eq('role', role)
+        .order('email', ascending: true);
+
+    return rows
+        .map((e) => Profile.fromMap(e as Map<String, dynamic>))
+        .toList();
+  }
 }
 
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
