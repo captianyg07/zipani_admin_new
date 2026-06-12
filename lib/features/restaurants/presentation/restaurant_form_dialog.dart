@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_theme.dart';
+import '../../../core/design/design_tokens.dart';
+import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/app_dialog.dart';
 import '../data/restaurant_model.dart';
 
-/// Shared form for creating and editing a restaurant.
-/// Returns a [Restaurant] via Navigator.pop on save, or null on cancel.
 class RestaurantFormDialog extends StatefulWidget {
   const RestaurantFormDialog({super.key, this.existing});
-
-  /// When non-null, the dialog is in edit mode.
   final Restaurant? existing;
 
   @override
@@ -52,12 +50,10 @@ class _RestaurantFormDialogState extends State<RestaurantFormDialog> {
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
-
+    final r = widget.existing;
     final ratingText = _rating.text.trim();
-    final base = widget.existing;
-
-    final result = Restaurant(
-      id: base?.id,
+    Navigator.of(context).pop(Restaurant(
+      id: r?.id,
       name: _name.text.trim(),
       category: _category.text.trim().isEmpty ? null : _category.text.trim(),
       rating: ratingText.isEmpty ? null : double.tryParse(ratingText),
@@ -66,115 +62,86 @@ class _RestaurantFormDialogState extends State<RestaurantFormDialog> {
       imageUrl: _imageUrl.text.trim().isEmpty ? null : _imageUrl.text.trim(),
       isVeg: _isVeg,
       isActive: _isActive,
-      createdAt: base?.createdAt,
-    );
-
-    Navigator.of(context).pop(result);
+      createdAt: r?.createdAt,
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_isEdit ? 'Edit restaurant' : 'Add restaurant',
-                    style: Theme.of(context).textTheme.headlineSmall),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: _name,
-                  decoration: const InputDecoration(labelText: 'Name'),
-                  textInputAction: TextInputAction.next,
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Name is required' : null,
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _category,
-                  decoration:
-                      const InputDecoration(labelText: 'Category (optional)'),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _rating,
-                        decoration:
-                            const InputDecoration(labelText: 'Rating (0–5)'),
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        validator: (v) {
-                          final t = v?.trim() ?? '';
-                          if (t.isEmpty) return null; // optional
-                          final d = double.tryParse(t);
-                          if (d == null) return 'Invalid number';
-                          if (d < 0 || d > 5) return '0–5 only';
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _deliveryTime,
-                        decoration: const InputDecoration(
-                            labelText: 'Delivery time'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _imageUrl,
-                  decoration:
-                      const InputDecoration(labelText: 'Image URL (optional)'),
-                ),
-                const SizedBox(height: 8),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  activeColor: AppColors.saffron,
-                  title: const Text('Vegetarian'),
-                  value: _isVeg,
-                  onChanged: (v) => setState(() => _isVeg = v),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  activeColor: AppColors.saffron,
-                  title: const Text('Active'),
-                  value: _isActive,
-                  onChanged: (v) => setState(() => _isActive = v),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: _save,
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(120, 48),
-                      ),
-                      child: Text(_isEdit ? 'Save changes' : 'Add'),
-                    ),
-                  ],
-                ),
-              ],
+    return Form(
+      key: _formKey,
+      child: AppDialog(
+        title: _isEdit ? 'Edit restaurant' : 'Add restaurant',
+        actions: [
+          AppButton(
+              label: 'Cancel',
+              variant: AppButtonVariant.ghost,
+              onPressed: () => Navigator.of(context).pop()),
+          AppButton(
+              label: _isEdit ? 'Save changes' : 'Add', onPressed: _save),
+        ],
+        children: [
+          DialogField(
+            label: 'Name',
+            child: TextFormField(
+              controller: _name,
+              validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? 'Name is required' : null,
             ),
           ),
-        ),
+          DialogField(
+            label: 'Category',
+            child: TextFormField(controller: _category),
+          ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: DialogField(
+                  label: 'Rating (0–5)',
+                  child: TextFormField(
+                    controller: _rating,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) {
+                      final t = v?.trim() ?? '';
+                      if (t.isEmpty) return null;
+                      final d = double.tryParse(t);
+                      if (d == null) return 'Invalid';
+                      if (d < 0 || d > 5) return '0–5 only';
+                      return null;
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: DS.s12),
+              Expanded(
+                child: DialogField(
+                  label: 'Delivery time',
+                  child: TextFormField(controller: _deliveryTime),
+                ),
+              ),
+            ],
+          ),
+          DialogField(
+            label: 'Image URL',
+            child: TextFormField(controller: _imageUrl),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            activeColor: DS.brand,
+            title: const Text('Vegetarian'),
+            value: _isVeg,
+            onChanged: (v) => setState(() => _isVeg = v),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            activeColor: DS.brand,
+            title: const Text('Active'),
+            value: _isActive,
+            onChanged: (v) => setState(() => _isActive = v),
+          ),
+        ],
       ),
     );
   }

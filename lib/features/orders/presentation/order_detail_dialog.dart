@@ -2,15 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/theme/app_theme.dart';
-import '../data/order_model.dart';
+import '../../../core/design/design_tokens.dart';
+import '../../../core/design/typography.dart';
+import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/app_dialog.dart';
+import '../../../core/widgets/status_pill.dart';
 import '../data/order_status.dart';
+import '../data/order_model.dart';
 import 'order_controller.dart';
-import 'status_chip.dart';
 
 class OrderDetailDialog extends ConsumerStatefulWidget {
   const OrderDetailDialog({super.key, required this.order});
-
   final Order order;
 
   @override
@@ -20,6 +22,8 @@ class OrderDetailDialog extends ConsumerStatefulWidget {
 class _OrderDetailDialogState extends ConsumerState<OrderDetailDialog> {
   late OrderStatus _selectedStatus;
   bool _saving = false;
+
+  static const _currency = '\u20B9';
 
   @override
   void initState() {
@@ -45,17 +49,19 @@ class _OrderDetailDialogState extends ConsumerState<OrderDetailDialog> {
         ..hideCurrentSnackBar()
         ..showSnackBar(const SnackBar(
           content: Text('Order status updated'),
-          backgroundColor: AppColors.positive,
+          backgroundColor: DS.success,
         ));
     } else {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
-          content: Text(error),
-          backgroundColor: AppColors.danger,
-        ));
+            content: Text(error), backgroundColor: DS.danger));
     }
   }
+
+  String _money(double? v) => v == null
+      ? '—'
+      : NumberFormat.currency(symbol: _currency, decimalDigits: 0).format(v);
 
   @override
   Widget build(BuildContext context) {
@@ -65,104 +71,79 @@ class _OrderDetailDialogState extends ConsumerState<OrderDetailDialog> {
         ? null
         : DateFormat('d MMM yyyy, h:mm a').format(order.createdAt!.toLocal());
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      id == null ? 'Order' : 'Order #$id',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                  ),
-                  StatusChip(status: order.status),
-                ],
-              ),
-              if (dateText != null) ...[
-                const SizedBox(height: 4),
-                Text(dateText,
-                    style: Theme.of(context).textTheme.bodyMedium),
-              ],
-              const SizedBox(height: 20),
-              _SectionLabel('CUSTOMER'),
-              const SizedBox(height: 8),
-              _InfoRow(Icons.person_outline, order.customerName),
-              if (order.phone != null && order.phone!.isNotEmpty)
-                _InfoRow(Icons.phone_outlined, order.phone!),
-              if (order.address != null && order.address!.isNotEmpty)
-                _InfoRow(Icons.location_on_outlined, order.address!),
-              const SizedBox(height: 20),
-              _SectionLabel('ITEMS'),
-              const SizedBox(height: 8),
-              if (id == null)
-                Text('No order id — items unavailable.',
-                    style: Theme.of(context).textTheme.bodyMedium)
-              else
-                _ItemsList(orderId: id),
-              const SizedBox(height: 16),
-              _TotalRow(amount: order.totalAmount),
-              const SizedBox(height: 24),
-              _SectionLabel('UPDATE STATUS'),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final s in OrderStatus.assignable)
-                    ChoiceChip(
-                      label: Text(s.label),
-                      selected: _selectedStatus == s,
-                      onSelected: (_) => setState(() => _selectedStatus = s),
-                      selectedColor: s.color.withOpacity(0.18),
-                      labelStyle: TextStyle(
-                        color: _selectedStatus == s ? s.color : AppColors.inkSoft,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      side: BorderSide(
-                        color: _selectedStatus == s ? s.color : AppColors.line,
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed:
-                        _saving ? null : () => Navigator.of(context).pop(),
-                    child: const Text('Close'),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: (_saving || _selectedStatus == order.status)
-                        ? null
-                        : _saveStatus,
-                    style: FilledButton.styleFrom(
-                        minimumSize: const Size(150, 48)),
-                    child: _saving
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Text('Save status'),
-                  ),
-                ],
-              ),
-            ],
-          ),
+    return AppDialog(
+      title: id == null ? 'Order' : 'Order #$id',
+      maxWidth: 540,
+      actions: [
+        AppButton(
+          label: 'Close',
+          variant: AppButtonVariant.ghost,
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
         ),
-      ),
+        AppButton(
+          label: _saving ? 'Saving…' : 'Save status',
+          onPressed: (_saving || _selectedStatus == order.status)
+              ? null
+              : _saveStatus,
+        ),
+      ],
+      children: [
+        Row(
+          children: [
+            StatusPill(label: order.status.label, color: order.status.color),
+            const Spacer(),
+            if (dateText != null) Text(dateText, style: AppType.small),
+          ],
+        ),
+        const SizedBox(height: DS.s20),
+        const _Label('CUSTOMER'),
+        const SizedBox(height: DS.s8),
+        _InfoRow(Icons.person_outline, order.customerName),
+        if (order.phone != null && order.phone!.isNotEmpty)
+          _InfoRow(Icons.phone_outlined, order.phone!),
+        if (order.address != null && order.address!.isNotEmpty)
+          _InfoRow(Icons.location_on_outlined, order.address!),
+        const SizedBox(height: DS.s20),
+        const _Label('ITEMS'),
+        const SizedBox(height: DS.s8),
+        if (id == null)
+          Text('No order id — items unavailable.', style: AppType.body)
+        else
+          _ItemsList(orderId: id),
+        const SizedBox(height: DS.s16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Total', style: AppType.h3),
+            Text(_money(order.totalAmount),
+                style: AppType.h2.copyWith(color: DS.brandDeep)),
+          ],
+        ),
+        const SizedBox(height: DS.s24),
+        const _Label('UPDATE STATUS'),
+        const SizedBox(height: DS.s12),
+        Wrap(
+          spacing: DS.s8,
+          runSpacing: DS.s8,
+          children: [
+            for (final s in OrderStatus.assignable)
+              ChoiceChip(
+                label: Text(s.label),
+                selected: _selectedStatus == s,
+                onSelected: (_) => setState(() => _selectedStatus = s),
+                selectedColor: s.color.withOpacity(0.18),
+                backgroundColor: DS.surface,
+                labelStyle: TextStyle(
+                  color: _selectedStatus == s ? s.color : DS.inkSoft,
+                  fontWeight: FontWeight.w600,
+                ),
+                side: BorderSide(
+                    color: _selectedStatus == s ? s.color : DS.line),
+              ),
+          ],
+        ),
+        const SizedBox(height: DS.s8),
+      ],
     );
   }
 }
@@ -176,60 +157,53 @@ class _ItemsList extends ConsumerWidget {
     final itemsAsync = ref.watch(orderItemsProvider(orderId));
     return itemsAsync.when(
       loading: () => const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Center(child: CircularProgressIndicator()),
+        padding: EdgeInsets.symmetric(vertical: DS.s16),
+        child: Center(
+            child: CircularProgressIndicator(color: DS.brand, strokeWidth: 2)),
       ),
-      error: (e, _) => Text(
-        'Could not load items.',
-        style: Theme.of(context)
-            .textTheme
-            .bodyMedium
-            ?.copyWith(color: AppColors.danger),
-      ),
+      error: (e, _) => Text('Could not load items.',
+          style: AppType.body.copyWith(color: DS.danger)),
       data: (items) {
         if (items.isEmpty) {
-          return Text('No items on this order.',
-              style: Theme.of(context).textTheme.bodyMedium);
+          return Text('No items on this order.', style: AppType.body);
         }
         return Container(
           decoration: BoxDecoration(
-            color: AppColors.cream,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.line),
+            color: DS.canvasAlt,
+            borderRadius: BorderRadius.circular(DS.rMd),
+            border: Border.all(color: DS.line),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: DS.s12, vertical: 2),
           child: Column(
             children: [
               for (var i = 0; i < items.length; i++) ...[
-                if (i > 0) const Divider(height: 1, color: AppColors.line),
+                if (i > 0) const Divider(height: 1, color: DS.line),
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: DS.s12),
                   child: Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                            horizontal: DS.s8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppColors.line),
+                          color: DS.surface,
+                          borderRadius: BorderRadius.circular(DS.rSm),
+                          border: Border.all(color: DS.line),
                         ),
                         child: Text('×${items[i].quantity}',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w600, fontSize: 13)),
+                            style: AppType.small.copyWith(
+                                color: DS.ink, fontWeight: FontWeight.w700)),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: DS.s12),
                       Expanded(
-                        child: Text(items[i].itemName,
-                            style: Theme.of(context).textTheme.bodyMedium),
-                      ),
+                          child: Text(items[i].itemName, style: AppType.body)),
                       Text(
                         items[i].lineTotal != null
-                            ? '₹${items[i].lineTotal!.toStringAsFixed(2)}'
+                            ? '\u20B9${items[i].lineTotal!.toStringAsFixed(2)}'
                             : (items[i].itemPrice != null
-                                ? '₹${items[i].itemPrice!.toStringAsFixed(2)}'
+                                ? '\u20B9${items[i].itemPrice!.toStringAsFixed(2)}'
                                 : '—'),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        style: AppType.bodyStrong,
                       ),
                     ],
                   ),
@@ -243,55 +217,28 @@ class _ItemsList extends ConsumerWidget {
   }
 }
 
-class _TotalRow extends StatelessWidget {
-  const _TotalRow({this.amount});
-  final double? amount;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text('Total', style: Theme.of(context).textTheme.titleMedium),
-        Text(
-          amount != null ? '₹${amount!.toStringAsFixed(2)}' : '—',
-          style: Theme.of(context)
-              .textTheme
-              .headlineSmall
-              ?.copyWith(color: AppColors.saffronDeep),
-        ),
-      ],
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.text);
+class _Label extends StatelessWidget {
+  const _Label(this.text);
   final String text;
-
   @override
-  Widget build(BuildContext context) {
-    return Text(text, style: Theme.of(context).textTheme.labelLarge);
-  }
+  Widget build(BuildContext context) =>
+      Text(text, style: AppType.eyebrow);
 }
 
 class _InfoRow extends StatelessWidget {
   const _InfoRow(this.icon, this.value);
   final IconData icon;
   final String value;
-
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: DS.s6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 18, color: AppColors.muted),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
-          ),
+          Icon(icon, size: 18, color: DS.muted),
+          const SizedBox(width: DS.s8),
+          Expanded(child: Text(value, style: AppType.body)),
         ],
       ),
     );

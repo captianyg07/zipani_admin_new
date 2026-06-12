@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_theme.dart';
+import '../../../core/design/design_tokens.dart';
+import '../../../core/design/typography.dart';
+import '../../../core/widgets/app_button.dart';
 import 'auth_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -42,41 +44,65 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       next.whenOrNull(
         error: (e, _) => ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              content: Text(e.toString()),
-              backgroundColor: AppColors.danger,
-            ),
-          ),
+          ..showSnackBar(SnackBar(
+              content: Text(e.toString()), backgroundColor: DS.danger)),
       );
     });
 
     return Scaffold(
+      backgroundColor: DS.canvas,
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 380),
+          padding: const EdgeInsets.all(DS.s24),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 420),
+            padding: const EdgeInsets.all(DS.s32),
+            decoration: BoxDecoration(
+              color: DS.surface,
+              borderRadius: BorderRadius.circular(DS.rXl),
+              boxShadow: DS.shadowMd,
+            ),
             child: Form(
               key: _formKey,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const _Wordmark(),
-                  const SizedBox(height: 32),
-                  Text('Sign in', style: Theme.of(context).textTheme.displaySmall),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Manage restaurants, menus, orders, and offers.',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                            color: DS.brand,
+                            borderRadius: BorderRadius.circular(DS.rMd)),
+                        child: const Icon(Icons.restaurant_menu,
+                            color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(width: DS.s12),
+                      const Text('Zipani',
+                          style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: DS.ink,
+                              letterSpacing: -0.5)),
+                    ],
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: DS.s32),
+                  Text('Sign in', style: AppType.display),
+                  const SizedBox(height: DS.s6),
+                  Text('Manage restaurants, menus, orders, and offers.',
+                      style: AppType.body),
+                  const SizedBox(height: DS.s24),
+                  Text('Email',
+                      style: AppType.small.copyWith(
+                          color: DS.inkSoft, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: DS.s6),
                   TextFormField(
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
-                    decoration: const InputDecoration(labelText: 'Email'),
+                    decoration: const InputDecoration(hintText: 'you@example.com'),
                     validator: (v) {
                       final value = v?.trim() ?? '';
                       if (value.isEmpty) return 'Enter your email';
@@ -84,36 +110,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: DS.s16),
+                  Text('Password',
+                      style: AppType.small.copyWith(
+                          color: DS.inkSoft, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: DS.s6),
                   TextFormField(
                     controller: _password,
                     obscureText: _obscure,
                     autofillHints: const [AutofillHints.password],
                     onFieldSubmitted: (_) => _submit(),
                     decoration: InputDecoration(
-                      labelText: 'Password',
+                      hintText: '••••••••',
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _obscure ? Icons.visibility_off : Icons.visibility,
-                          color: AppColors.muted,
-                        ),
+                            _obscure
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            color: DS.muted),
                         onPressed: () => setState(() => _obscure = !_obscure),
                       ),
                     ),
                     validator: (v) =>
                         (v == null || v.isEmpty) ? 'Enter your password' : null,
                   ),
-                  const SizedBox(height: 24),
-                  FilledButton(
+                  const SizedBox(height: DS.s24),
+                  AppButton(
+                    label: isLoading ? 'Signing in…' : 'Sign in',
+                    expand: true,
+                    height: 50,
                     onPressed: isLoading ? null : _submit,
-                    child: isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Text('Sign in'),
                   ),
                 ],
               ),
@@ -121,51 +147,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _Wordmark extends StatelessWidget {
-  const _Wordmark();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: AppColors.saffron,
-            borderRadius: BorderRadius.circular(9),
-          ),
-          alignment: Alignment.center,
-          child: const Text(
-            'Z',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        const Text(
-          'Zipani',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color: AppColors.ink,
-            letterSpacing: -0.5,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text('Admin',
-            style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.muted)),
-      ],
     );
   }
 }

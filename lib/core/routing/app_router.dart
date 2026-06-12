@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../design/design_tokens.dart';
+
 import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/auth/presentation/current_profile_provider.dart';
 import '../../features/auth/presentation/current_user.dart';
@@ -92,7 +94,10 @@ class _SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
+      backgroundColor: DS.canvas,
+      body: Center(
+        child: CircularProgressIndicator(color: DS.brand, strokeWidth: 2.5),
+      ),
     );
   }
 }
