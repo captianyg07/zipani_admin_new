@@ -29,6 +29,8 @@ const _all = <_Dest>[
   _Dest('Menu', Icons.restaurant_menu_outlined, '/menu', ownerVisible: true),
   _Dest('Orders', Icons.receipt_long_outlined, '/orders', ownerVisible: true),
   _Dest('Offers', Icons.campaign_outlined, '/offers', ownerVisible: true),
+  _Dest('Delivery Partners', Icons.delivery_dining_outlined,
+      '/delivery-partners', title: 'Delivery Partners'),
 ];
 
 List<_Dest> _destsFor(UserRole role) {

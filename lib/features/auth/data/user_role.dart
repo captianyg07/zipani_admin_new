@@ -1,7 +1,8 @@
-/// Roles stored in profiles.role. V2 model: two roles only.
+/// Roles stored in profiles.role.
 enum UserRole {
   superAdmin,
   restaurantOwner,
+  deliveryPartner,
   unknown;
 
   /// Maps stored text to an enum. Defaults to [unknown] so an unrecognized
@@ -15,6 +16,9 @@ enum UserRole {
       case 'restaurantowner':
       case 'owner':
         return UserRole.restaurantOwner;
+      case 'delivery_partner':
+      case 'deliverypartner':
+        return UserRole.deliveryPartner;
       default:
         return UserRole.unknown;
     }
@@ -23,12 +27,14 @@ enum UserRole {
   String get dbValue => switch (this) {
         UserRole.superAdmin => 'super_admin',
         UserRole.restaurantOwner => 'restaurant_owner',
+        UserRole.deliveryPartner => 'delivery_partner',
         UserRole.unknown => 'unknown',
       };
 
   String get label => switch (this) {
         UserRole.superAdmin => 'Super Admin',
         UserRole.restaurantOwner => 'Restaurant Owner',
+        UserRole.deliveryPartner => 'Delivery Partner',
         UserRole.unknown => 'Unknown',
       };
 
@@ -36,4 +42,6 @@ enum UserRole {
   bool get isSuperAdmin => this == UserRole.superAdmin;
 
   bool get isOwner => this == UserRole.restaurantOwner;
+
+  bool get isDeliveryPartner => this == UserRole.deliveryPartner;
 }

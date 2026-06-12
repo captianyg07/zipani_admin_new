@@ -14,6 +14,7 @@ import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/menu/presentation/menu_screen.dart';
 import '../../features/orders/presentation/order_list_screen.dart';
 import '../../features/restaurants/presentation/restaurant_list_screen.dart';
+import '../../features/delivery_partners/presentation/delivery_partners_screen.dart';
 import '../../features/shell/presentation/app_shell.dart';
 
 /// Rebuilds GoRouter redirects when auth state OR the resolved user change.
@@ -83,6 +84,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const OrderListScreen(),
           ),
           GoRoute(path: '/offers', builder: (_, __) => const BannerScreen()),
+          GoRoute(
+            path: '/delivery-partners',
+            builder: (_, __) => const DeliveryPartnersScreen(),
+          ),
         ],
       ),
     ],
